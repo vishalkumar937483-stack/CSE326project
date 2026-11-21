@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambulance Dispatch Coordination System</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f2f4f7; color: #222; }
+header { background: #c62828; color: white; padding: 14px 20px; }
+header h1 { font-size: 22px; margin-bottom: 10px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { background: #d85454; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.tab:hover { background: #ef9a9a; }
+.tab.active { background: white; color: #c62828; font-weight: bold; }
+main { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
+.page { display: none; background: white; padding: 20px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+.page.active { display: block; }
+h2 { margin-bottom: 15px; color: #c62828; }
+h3 { margin: 20px 0 10px; }
+.hint { color: #666; margin-bottom: 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.card { padding: 18px; border-radius: 6px; color: white; text-align: center; }
+.card span { font-size: 34px; font-weight: bold; }
+.card.red { background: #e53935; }
+.card.green { background: #43a047; }
+.card.orange { background: #fb8c00; }
+.card.blue { background: #1e88e5; }
+form { display: grid; gap: 14px; max-width: 500px; }
+label { display: grid; gap: 4px; font-weight: bold; font-size: 14px; }
+input, select { padding: 8px; border: 1px solid #aaa; border-radius: 4px; font-size: 14px; }
+.btn, .small-btn { background: #c62828; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.btn { padding: 10px; font-size: 15px; }
+.small-btn { padding: 6px 10px; font-size: 13px; margin-right: 4px; }
+.small-btn.green { background: #43a047; }
+.small-btn.gray { background: #757575; }
+.msg { color: #2e7d32; font-weight: bold; }
+#searchBox { width: 100%; margin-bottom: 12px; }
+.box { border: 1px solid #ccc; border-left: 6px solid #999; border-radius: 4px; padding: 12px; margin-bottom: 10px; }
+.box.p1 { border-left-color: #d32f2f; }
+.box.p2 { border-left-color: #f57c00; }
+.box.p3 { border-left-color: #fbc02d; }
+.box.p4 { border-left-color: #43a047; }
+.box p { margin: 4px 0; font-size: 14px; }
+.row { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; color: white; }
+.b1 { background: #d32f2f; }
+.b2 { background: #f57c00; }
+.b3 { background: #f9a825; }
+.b4 { background: #43a047; }
+.s-Available { background: #43a047; }
+.s-Busy { background: #f57c00; }
+.s-Maintenance { background: #757575; }
+.s-Completed { background: #1e88e5; }
+.s-Cancelled { background: #757575; }
+.steps { display: flex; gap: 4px; margin: 8px 0; }
+.step { flex: 1; text-align: center; font-size: 11px; padding: 5px 2px; background: #e0e0e0; border-radius: 3px; }
+.step.done { background: #43a047; color: white; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+th { background: #eee; }
+.empty { color: #888; font-style: italic; padding: 8px 0; }
+footer { text-align: center; padding: 20px; color: #777; font-size: 13px; }
+@media (max-width: 600px) {
+  .steps { flex-direction: column; }
+  table { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚑 Ambulance Dispatch System</h1>
+  <nav>
+    <button class="tab active" data-page="dashboard">Dashboard</button>
+    <button class="tab" data-page="request">New Request</button>
+    <button class="tab" data-page="dispatch">Dispatch</button>
+    <button class="tab" data-page="trips">Trip Status</button>
+    <button class="tab" data-page="ambulances">Ambulances</button>
+    <button class="tab" data-page="history">Incident History</button>
+  </nav>
+</header>
+
+<main>
+
+  <section id="dashboard" class="page active">
+    <h2>Dashboard</h2>
+    <div class="cards">
+      <div class="card red"><span id="statPending">0</span><p>Pending Requests</p></div>
+      <div class="card green"><span id="statAvailable">0</span><p>Available Ambulances</p></div>
+      <div class="card orange"><span id="statActive">0</span><p>Active Trips</p></div>
+      <div class="card blue"><span id="statDone">0</span><p>Completed Trips</p></div>
+    </div>
+    <h3>Pending Emergencies (highest priority first)</h3>
+    <div id="dashPending"></div>
+  </section>
+
+  <section id="request" class="page">
+    <h2>New Emergency Request</h2>
+    <form id="requestForm">
+      <label>Patient / Caller Name
+        <input type="text" id="name" required>
+      </label>
+      <label>Phone Number
+        <input type="tel" id="phone" pattern="[0-9]{10}" placeholder="10 digits" required>
+      </label>
+      <label>Emergency Type
+        <select id="type" required>
+          <option value="">-- Select --</option>
+          <option>Road Accident</option>
+          <option>Heart Attack</option>
+          <option>Breathing Problem</option>
+          <option>Burn Injury</option>
+          <option>Pregnancy / Delivery</option>
+          <option>Other</option>
+        </select>
+      </label>
+      <label>Area
+        <select id="area" required>
+          <option value="">-- Select --</option>
+          <option>North</option>
+          <option>South</option>
+          <option>East</option>
+          <option>West</option>
+          <option>Central</option>
+        </select>
+      </label>
+      <label>Exact Location / Address
+        <input type="text" id="address" placeholder="Street, landmark" required>
+      </label>
+      <label>Priority
+        <select id="priority" required>
+          <option value="1">Critical</option>
+          <option value="2">High</option>
+          <option value="3" selected>Medium</option>
+          <option value="4">Low</option>
+        </select>
+      </label>
+      <button type="submit" class="btn">Submit Request</button>
+      <p id="formMsg" class="msg"></p>
+    </form>
+  </section>
+
+  <section id="dispatch" class="page">
+    <h2>Dispatch Assignment</h2>
+    <p class="hint">Pick an available ambulance for each pending request, or use Auto-Assign.</p>
+    <div id="dispatchList"></div>
+  </section>
+
+  <section id="trips" class="page">
+    <h2>Trip Status</h2>
+    <div id="tripList"></div>
+  </section>
+
+  <section id="ambulances" class="page">
+    <h2>Ambulance Availability</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Vehicle No.</th><th>Driver</th><th>Base Area</th><th>Status</th><th>Action</th></tr>
+      </thead>
+      <tbody id="ambTable"></tbody>
+    </table>
+  </section>
+
+  <section id="history" class="page">
+    <h2>Incident History</h2>
+    <input type="text" id="searchBox" placeholder="Search by name, type or area...">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Time</th><th>Patient</th><th>Type</th><th>Area</th><th>Priority</th><th>Ambulance</th><th>Result</th></tr>
+      </thead>
+      <tbody id="historyTable"></tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer>CSE326 Project &mdash; Ambulance Dispatch Coordination System</footer>
+
+<script>
+const STAGES = ["Dispatched", "On the way", "Patient picked", "Reached hospital", "Completed"];
+const PRIORITY = { 1: "Critical", 2: "High", 3: "Medium", 4: "Low" };
+
+let ambulances = [
+  { id: 1, number: "PB-08-AM-1001", driver: "Ramesh",   area: "North",   status: "Available" },
+  { id: 2, number: "PB-08-AM-1002", driver: "Suresh",   area: "South",   status: "Available" },
+  { id: 3, number: "PB-08-AM-1003", driver: "Gurpreet", area: "East",    status: "Available" },
+  { id: 4, number: "PB-08-AM-1004", driver: "Amit",     area: "West",    status: "Available" },
+  { id: 5, number: "PB-08-AM-1005", driver: "Harjit",   area: "Central", status: "Maintenance" }
+];
+
+let requests = [];
+let nextId = 1;
+
+function save() {
+  try {
+    localStorage.setItem("dispatchData", JSON.stringify({ ambulances, requests, nextId }));
+  } catch (e) {}
+}
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("dispatchData"));
+    if (saved) {
+      ambulances = saved.ambulances;
+      requests = saved.requests;
+      nextId = saved.nextId;
+    }
+  } catch (e) {}
+}
+
+function getAmbulance(id) {
+  return ambulances.find(a => a.id === id);
+}
+
+function ambLabel(id) {
+  const a = getAmbulance(id);
+  return a ? a.number + " (" + a.driver + ")" : "-";
+}
+
+function isActive(r) {
+  return STAGES.includes(r.status) && r.status !== "Completed";
+}
+
+function pendingList() {
+  return requests
+    .filter(r => r.status === "Pending")
+    .sort((a, b) => a.priority - b.priority || a.id - b.id);
+}
+
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.page).classList.add("active");
+    renderAll();
+  });
+});
+
+document.getElementById("requestForm").addEventListener("submit", function (e) {
+  e.preventDefault();
+
+  requests.push({
+    id: nextId++,
+    name: document.getElementById("name").value.trim(),
+    phone: document.getElementById("phone").value,
+    type: document.getElementById("type").value,
+    area: document.getElementById("area").value,
+    address: document.getElementById("address").value.trim(),
+    priority: Number(document.getElementById("priority").value),
+    time: new Date().toLocaleString(),
+    status: "Pending",
+    ambulanceId: null
+  });
+
+  save();
+  this.reset();
+  document.getElementById("formMsg").textContent = "Request submitted! Go to the Dispatch tab to assign an ambulance.";
+  renderAll();
+});
+
+function dispatchAmbulance(reqId, ambId) {
+  const r = requests.find(x => x.id === reqId);
+  const a = getAmbulance(ambId);
+  if (!r || !a || a.status !== "Available") {
+    alert("Please select an available ambulance.");
+    return;
+  }
+  r.ambulanceId = a.id;
+  r.status = "Dispatched";
+  a.status = "Busy";
+  save();
+  renderAll();
+}
+
+function autoAssign(reqId) {
+  const r = requests.find(x => x.id === reqId);
+  const free = ambulances.filter(a => a.status === "Available");
+  if (free.length === 0) { alert("No ambulance is available right now!"); return; }
+  const best = free.find(a => a.area === r.area) || free[0];
+  dispatchAmbulance(reqId, best.id);
+}
+
+function cancelRequest(reqId) {
+  const r = requests.find(x => x.id === reqId);
+  r.status = "Cancelled";
+  save();
+  renderAll();
+}
+
+function nextStage(reqId) {
+  const r = requests.find(x => x.id === reqId);
+  const i = STAGES.indexOf(r.status);
+  r.status = STAGES[i + 1];
+  if (r.status === "Completed") {
+    getAmbulance(r.ambulanceId).status = "Available";
+  }
+  save();
+  renderAll();
+}
+
+function toggleMaintenance(id) {
+  const a = getAmbulance(id);
+  if (a.status === "Busy") { alert("Ambulance is on a trip."); return; }
+  a.status = (a.status === "Available") ? "Maintenance" : "Available";
+  save();
+  renderAll();
+}
+
+function requestBox(r, extraHtml) {
+  return `
+    <div class="box p${r.priority}">
+      <p><b>#${r.id} ${r.type}</b>
+         <span class="badge b${r.priority}">${PRIORITY[r.priority]}</span></p>
+      <p>Patient: ${r.name} | Phone: ${r.phone}</p>
+      <p>Location: ${r.address}, ${r.area} area</p>
+      <p>Requested at: ${r.time}</p>
+      ${extraHtml || ""}
+    </div>`;
+}
+
+function renderDashboard() {
+  document.getElementById("statPending").textContent = pendingList().length;
+  document.getElementById("statAvailable").textContent =
+    ambulances.filter(a => a.status === "Available").length;
+  document.getElementById("statActive").textContent = requests.filter(isActive).length;
+  document.getElementById("statDone").textContent =
+    requests.filter(r => r.status === "Completed").length;
+
+  const list = pendingList();
+  document.getElementById("dashPending").innerHTML =
+    list.length ? list.map(r => requestBox(r)).join("")
+                : '<p class="empty">No pending emergencies.</p>';
+}
+
+function renderDispatch() {
+  const list = pendingList();
+  const free = ambulances.filter(a => a.status === "Available");
+
+  document.getElementById("dispatchList").innerHTML = list.length
+    ? list.map(r => {
+        const options = free.map(a =>
+          `<option value="${a.id}">${a.number} - ${a.driver} (${a.area})</option>`).join("");
+        const controls = `
+          <div class="row">
+            <select id="sel${r.id}">
+              <option value="">-- Choose ambulance --</option>${options}
+            </select>
+            <button class="small-btn" onclick="dispatchAmbulance(${r.id}, Number(document.getElementById('sel${r.id}').value))">Dispatch</button>
+            <button class="small-btn green" onclick="autoAssign(${r.id})">Auto-Assign</button>
+            <button class="small-btn gray" onclick="cancelRequest(${r.id})">Cancel</button>
+          </div>`;
+        return requestBox(r, controls);
+      }).join("")
+    : '<p class="empty">No requests waiting for dispatch.</p>';
+}
+
+function renderTrips() {
+  const active = requests.filter(isActive);
+  document.getElementById("tripList").innerHTML = active.length
+    ? active.map(r => {
+        const pos = STAGES.indexOf(r.status);
+        const bar = STAGES.map((s, i) =>
+          `<div class="step ${i <= pos ? "done" : ""}">${s}</div>`).join("");
+        const extra = `
+          <p>Ambulance: <b>${ambLabel(r.ambulanceId)}</b></p>
+          <div class="steps">${bar}</div>
+          <button class="small-btn" onclick="nextStage(${r.id})">
+            Move to: ${STAGES[pos + 1]}
+          </button>`;
+        return requestBox(r, extra);
+      }).join("")
+    : '<p class="empty">No active trips.</p>';
+}
+
+function renderAmbulances() {
+  document.getElementById("ambTable").innerHTML = ambulances.map(a => `
+    <tr>
+      <td>${a.id}</td><td>${a.number}</td><td>${a.driver}</td><td>${a.area}</td>
+      <td><span class="badge s-${a.status}">${a.status}</span></td>
+      <td>${a.status === "Busy" ? "-" :
+        `<button class="small-btn gray" onclick="toggleMaintenance(${a.id})">
+           ${a.status === "Available" ? "Mark Maintenance" : "Mark Available"}</button>`}
+      </td>
+    </tr>`).join("");
+}
+
+function renderHistory() {
+  const text = document.getElementById("searchBox").value.toLowerCase();
+  const done = requests
+    .filter(r => r.status === "Completed" || r.status === "Cancelled")
+    .filter(r => (r.name + r.type + r.area).toLowerCase().includes(text))
+    .reverse();
+
+  document.getElementById("historyTable").innerHTML = done.length
+    ? done.map(r => `
+        <tr>
+          <td>${r.id}</td><td>${r.time}</td><td>${r.name}</td><td>${r.type}</td>
+          <td>${r.area}</td>
+          <td><span class="badge b${r.priority}">${PRIORITY[r.priority]}</span></td>
+          <td>${r.ambulanceId ? ambLabel(r.ambulanceId) : "-"}</td>
+          <td><span class="badge s-${r.status}">${r.status}</span></td>
+        </tr>`).join("")
+    : '<tr><td colspan="8" class="empty">No incidents in history yet.</td></tr>';
+}
+
+document.getElementById("searchBox").addEventListener("input", renderHistory);
+
+function renderAll() {
+  renderDashboard();
+  renderDispatch();
+  renderTrips();
+  renderAmbulances();
+  renderHistory();
+}
+
+load();
+renderAll();
+</script>
+
+</body>
+</html>
